@@ -1,15 +1,15 @@
 //#include "pong.h"
 #include "Ball.h"
 
-Ball::Ball(int x, int y, bool player1scored)
+Ball::Ball(int x, int y, int velX, int velY, bool player1scored)
 {
     //Initialize the offsets
     mPosX = x;
     mPosY = y;
 
     //Initialize the velocity
-    mVelX = player1scored ? 5 : -5;
-    mVelY = 0; //(rand() % 5) - (rand() % 5);
+    mVelX = velX;
+    mVelY = velY; //(rand() % 5) - (rand() % 5);
 
     //Set collision box dimension
     mCollider.w = 2*BALL_RADIUS;

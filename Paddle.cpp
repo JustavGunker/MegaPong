@@ -28,6 +28,7 @@ Paddle::Paddle(bool player)
     blue = player;
     player1 = player; 
 
+    move_powerup = false;
 }
 
 void Paddle::handleEvent( SDL_Event& e )
@@ -42,8 +43,10 @@ void Paddle::handleEvent( SDL_Event& e )
             {
                 case SDLK_UP: mVelY -= PADDLE_VEL; break;
                 case SDLK_DOWN: mVelY += PADDLE_VEL; break;
-                case SDLK_LEFT: mVelX -= PADDLE_VEL; break;
-                case SDLK_RIGHT: mVelX += PADDLE_VEL; break;
+                if(move_powerup){
+                    case SDLK_LEFT: mVelX -= PADDLE_VEL; break;
+                    case SDLK_RIGHT: mVelX += PADDLE_VEL; break;
+                }
             }
         }
         //If a key was released
@@ -54,8 +57,10 @@ void Paddle::handleEvent( SDL_Event& e )
             {
                 case SDLK_UP: mVelY += PADDLE_VEL; break;
                 case SDLK_DOWN: mVelY -= PADDLE_VEL; break;
-                case SDLK_LEFT: mVelX += PADDLE_VEL; break;
-                case SDLK_RIGHT: mVelX -= PADDLE_VEL; break;
+                if(move_powerup){
+                    case SDLK_LEFT: mVelX += PADDLE_VEL; break;
+                    case SDLK_RIGHT: mVelX -= PADDLE_VEL; break;
+                }
             }
         }
     }
@@ -69,8 +74,10 @@ void Paddle::handleEvent( SDL_Event& e )
             {
                 case SDLK_w: mVelY -= PADDLE_VEL; break;
                 case SDLK_s: mVelY += PADDLE_VEL; break;
-                case SDLK_a: mVelX -= PADDLE_VEL; break;
-                case SDLK_d: mVelX += PADDLE_VEL; break;
+                if(move_powerup){
+                    case SDLK_a: mVelX -= PADDLE_VEL; break;
+                    case SDLK_d: mVelX += PADDLE_VEL; break;
+                }
             }
         }
         //If a key was released
@@ -81,8 +88,10 @@ void Paddle::handleEvent( SDL_Event& e )
             {
                 case SDLK_w: mVelY += PADDLE_VEL; break;
                 case SDLK_s: mVelY -= PADDLE_VEL; break;
-                case SDLK_a: mVelX += PADDLE_VEL; break;
-                case SDLK_d: mVelX -= PADDLE_VEL; break;
+                if(move_powerup){
+                    case SDLK_a: mVelX += PADDLE_VEL; break;
+                    case SDLK_d: mVelX -= PADDLE_VEL; break;
+                }
             }
         }
     }
@@ -92,30 +101,31 @@ void Paddle::handleEvent( SDL_Event& e )
 void Paddle::move()
 {
     //Move the dot left or right
-    mPosX += mVelX;
-    collisionRect.x = mPosX;
+    if(move_powerup){
+        mPosX += mVelX;
+        collisionRect.x = mPosX;
 
-    //If the dot went too far to the left or right
-    if(player1){
-        if( ( mPosX < field_rect.x + 2*BAR_WIDTH  ) || ( mPosX + 2*BAR_WIDTH > SCREEN_WIDTH/2) )
-        {
-            //Move back
-            mPosX -= mVelX;
-            collisionRect.x = mPosX;
+        //If the dot went too far to the left or right
+        if(player1){
+            if( ( mPosX < field_rect.x + 2*BAR_WIDTH  ) || ( mPosX + 2*BAR_WIDTH > SCREEN_WIDTH/2) )
+            {
+                //Move back
+                mPosX -= mVelX;
+                collisionRect.x = mPosX;
+            }
         }
-    }
-    else
-    {
-        if(( mPosX - BAR_WIDTH < SCREEN_WIDTH/2) || ( mPosX > field_rect.x + field_rect.w - 3*BAR_WIDTH  ) )
+        else
         {
-            //Move back
-            mPosX -= mVelX;
-            collisionRect.x = mPosX;
+            if(( mPosX - BAR_WIDTH < SCREEN_WIDTH/2) || ( mPosX > field_rect.x + field_rect.w - 3*BAR_WIDTH  ) )
+            {
+                //Move back
+                mPosX -= mVelX;
+                collisionRect.x = mPosX;
+            }
         }
+
     }
     
-
-
 
     //Move the dot up or down
     mPosY += mVelY;

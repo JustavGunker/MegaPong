@@ -10,15 +10,15 @@ class Ball
         //The dimensions of the dot
         static const int BALL_RADIUS = 8;
         static const int BALL_VEL_MIN = 4;
-        static const int BALL_VEL_MAX = 16;
+        static const int BALL_VEL_MAX = 8;
 
         //Maximum axis velocity of the dot
-        static const int BALL_VEL = 8;
+        static const int BALL_VEL = 4;
 
         bool blue;
 
         //Initializes the variables
-        Ball(int x, int y, bool player1scored);
+        Ball(int x, int y, int velX, int velY, bool player1scored);
 
 
         int clipVel(int vel);

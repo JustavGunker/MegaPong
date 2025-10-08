@@ -14,6 +14,7 @@ SDL_Renderer* renderer = NULL;
 SDL_Window* window = NULL;
 TTF_Font* font = NULL;
 LTexture textTexture;
+LTexture gTimeTextTexture;
 SDL_Rect spriteClips[ 10 ];
 SDL_Rect powerupClips[ 3 ];
 LTexture playerScoreTexture;
@@ -93,6 +94,8 @@ bool loadMedia(SDL_Surface** p_media_surface)
         success = false;
     }
 
+    
+
     return success;
 }
 
@@ -157,7 +160,7 @@ bool loadPowerups()
 }
 
 
-bool loadTextMedia(std::string string)
+bool loadTextMedia(LTexture* texture, std::string string)
 {
     //Loading success flag
     bool success = true;
@@ -185,9 +188,9 @@ bool loadTextMedia(std::string string)
     return success;
 }
 
-Ball initBall(int x, int y, bool player1goal)
+Ball initBall(int x, int y, int velX, int velY, bool player1goal)
 {
-    Ball ball(x,y,player1goal);
+    Ball ball(x,y,velX,velY,player1goal);
     return ball;
 }
 
@@ -257,6 +260,291 @@ void closeWindow(SDL_Surface** p_media_surface)
     SDL_Quit();
 }
 
+void DeleteBalls(std::vector<Ball>* vec, std::vector<int>* staleBalls)
+{
+    for(int i = 0; i < staleBalls->size(); i++)
+    {
+        int index = staleBalls->at(i);
+        if (index >= 0 && index < vec->size()) {
+            vec->erase(vec->begin() + index);
+        }
+        
+    }
+    staleBalls->clear();
+}
+
+void DeletePowerups(std::vector<Powerup>* vec, std::vector<int>* stalePU)
+{
+
+    for(int i = 0; i < stalePU->size(); i++)
+    {
+        int index = stalePU->at(i);
+        if (index >= 0 && index < vec->size()) {
+            vec->erase(vec->begin() + index);
+        }
+        
+    }
+    stalePU->clear();
+
+}
+
+int* getRandomPosition()
+{
+    static int pos[2];
+    pos[0] = rand() % (FIELD_WIDTH - 50) + field_rect.x + 25;
+    pos[1] = rand() % (FIELD_HEIGHT - 50) + field_rect.y + 25;
+    return pos;
+}
+
+
+void TwoPlayerMode(SDL_Surface* screen_surface, SDL_Surface* image_surface)
+{
+    // Main game loop for 2 player mode
+    //Main loop flag
+    bool quit = false;
+
+    //Event handler
+    SDL_Event e;
+
+    //Set text color as black
+    SDL_Color textColor = { 0, 0, 0, 255 };
+
+    //Timers
+    Uint32 startTime = 0;
+    Uint32 player1Timers[2] = {0,0};
+    Uint32 player2Timers[2] = {0,0};
+    Uint32 powerup1Duration = 10000; // 10 seconds
+    Uint32 powerup2Duration = 15000; // 15 seconds
+
+    //In memory text stream
+    std::stringstream timeText;
+
+    //balls
+    Paddle player1Paddle(true);
+    Paddle player2Paddle(false);
+    SDL_Rect* tempRect = NULL;
+    SDL_Rect* player1ScoreClipDec = NULL;
+    SDL_Rect* player1ScoreClipTen = NULL;
+    SDL_Rect* player2ScoreClipDec = NULL;
+    SDL_Rect* player2ScoreClipTen = NULL;
+
+    int player1Score = 0;
+    int player2Score = 0;
+    int index;
+    int ballNum;
+    bool spawnBall = false;
+    Ball tempBall = Ball(0,0,0,0,0);
+    std::vector<int> staleBalls;
+    Powerup tempPU = Powerup(0,0,0);
+    std::vector<int> stalePU;
+    std::vector<Ball> balls;
+    std::vector<Powerup> powerups;
+    
+    int collision = NO_COLLISION;
+    int lastCollision = NO_COLLISION;
+    int* randPos;
+    int direction = 1;
+
+    powerups.push_back(initPowerup(25 + SCREEN_WIDTH/2,25 + SCREEN_HEIGHT/2, 0));
+
+    //While application is running
+    while( !quit )
+    {
+
+        //Handle events on queue
+        while( SDL_PollEvent( &e ) != 0 )
+        {
+            //User requests quit
+            if( e.type == SDL_QUIT )
+            {
+                quit = true;
+                printf("Quitting...\n");
+            }
+            else if (e.type == SDL_KEYDOWN && e.key.repeat == 0 && e.key.keysym.sym == SDLK_q)
+            {
+                quit = true;
+                printf("Quitting...\n");
+            }
+            else if( e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_1 )
+            {
+                randPos = getRandomPosition();
+                powerups.push_back(initPowerup(randPos[0], randPos[1], 0));
+            }
+            else if( e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_2 )
+            {
+                randPos = getRandomPosition();
+                powerups.push_back(initPowerup(randPos[0], randPos[1], 1));
+            }
+            else if( e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_3 )
+            {
+                randPos = getRandomPosition();
+                powerups.push_back(initPowerup(randPos[0], randPos[1], 2));
+            }
+
+        player1Paddle.handleEvent ( e );
+        player2Paddle.handleEvent ( e );
+        }
+
+        // Handle powerup durations
+        if(player1Paddle.move_powerup && (SDL_GetTicks() - player1Timers[0] >= powerup1Duration))
+        {
+            player1Paddle.move_powerup = false;
+            player1Paddle.mPosX = field_rect.x + 2*BAR_WIDTH;
+            player1Paddle.collisionRect.x = player1Paddle.mPosX;
+        }
+        if(player2Paddle.move_powerup && (SDL_GetTicks() - player2Timers[0] >= powerup1Duration))
+        {
+            player2Paddle.move_powerup = false;
+            player2Paddle.mPosX = field_rect.x + field_rect.w - 3*BAR_WIDTH;
+            player2Paddle.collisionRect.x = player2Paddle.mPosX;
+        }
+
+
+        if (balls.empty())
+        {
+            direction = lastCollision == RIGHT_GOAL_COLLISION ? 1 : -1;   
+            balls.push_back(initBall(SCREEN_WIDTH/2, SCREEN_HEIGHT/2, 5*direction, 0, lastCollision == RIGHT_GOAL_COLLISION));
+        
+        }
+
+        ballNum = balls.size();
+        for(int i = 0; i < ballNum; i++)
+        {
+            collision = balls[i].move(player1Paddle, player2Paddle, lastCollision);
+            if (collision == RIGHT_GOAL_COLLISION)
+            {
+                player1Score++;
+                staleBalls.push_back(i);
+
+            } else if (collision == LEFT_GOAL_COLLISION)
+            {
+                player2Score++;
+                staleBalls.push_back(i);
+            }
+            for(int j = 0; j < powerups.size(); j++){
+                if(powerups.at(j).checkCollision(balls.at(i).mCollider)){
+                    
+                    collision = POWERUP_COLLISION;
+                    stalePU.push_back(j);
+                    switch(powerups.at(j).power){
+                        case 0:
+                            if(balls.at(i).blue){
+                                player1Paddle.move_powerup = true;
+                                player1Timers[0] = SDL_GetTicks();
+                            }
+                            else{
+                                player2Paddle.move_powerup = true;
+                                player2Timers[0] = SDL_GetTicks();
+                            }
+                            break;
+                        case 1:      
+                            direction = balls.at(i).blue ? 1 : -1;
+                            balls.push_back(initBall(powerups.at(j).mPosX, powerups.at(j).mPosY, 5*direction, 0, balls.at(i).blue));
+                            //balls.push_back(initBall(powerups.at(j).mPosX, powerups.at(j).mPosY, 5*direction, 5, balls.at(i).blue));
+                            //balls.push_back(initBall(powerups.at(j).mPosX, powerups.at(j).mPosY, 5*direction, -5, balls.at(i).blue));
+                            
+                            
+                            break;
+                        case 2:      
+                            if(balls.at(i).blue){
+                                PADDLE_HEIGHT = 100;
+                                player1Paddle.collisionRect.h = PADDLE_HEIGHT;
+                                player1Timers[1] = SDL_GetTicks();
+                            }
+                            else{
+                                PADDLE_HEIGHT = 100;
+                                player2Paddle.collisionRect.h = PADDLE_HEIGHT;
+                                player2Timers[1] = SDL_GetTicks();
+                            }
+                            break;                               
+                            
+                    }
+                    
+                    powerups.at(j).power = -1; // Ensure powerup doesn't trigger multiple times  
+                    
+                }
+            }
+        }
+        // Remove stale balls
+        DeleteBalls(&balls, &staleBalls);
+        
+        // Remove duplicate indices in case multiple balls hit a powerup in one frame
+        sort(stalePU.begin(), stalePU.end());
+        auto it = unique(stalePU.begin(), stalePU.end()); // Move all duplicates to last of vector
+        stalePU.erase(it, stalePU.end()); // Remove all duplicates
+        // Remove stale powerups
+        DeletePowerups(&powerups, &stalePU);
+        
+        if(collision != PLAYER1_COLLISION)
+        {
+            player1Paddle.move();
+            
+        }
+        if(collision != PLAYER2_COLLISION)
+        {
+            player2Paddle.move();
+            
+        }
+
+
+        //Set text to be rendered
+        timeText.str( "" );
+        timeText << "Time " << ((SDL_GetTicks() - startTime) / 1000)/60 << ":" << ((SDL_GetTicks() - startTime) / 1000) % 60;
+
+        //Render text
+        if( !gTimeTextTexture.loadFromRenderedText( timeText.str().c_str(), textColor ) )
+        {
+            printf( "Unable to render time texture!\n" );
+        }
+
+        
+        //Clear screen
+        SDL_SetRenderDrawColor( renderer, 0xFF, 0xFF, 0xFF, 0xFF );
+        SDL_RenderClear( renderer );
+        //SDL_RenderFillRect( renderer, &field_rect );
+
+        //Render textures
+        gTimeTextTexture.render( ( SCREEN_WIDTH - gTimeTextTexture.getWidth() ) / 2, textTexture.getHeight() );
+
+        drawField(renderer, &field_rect);
+        for(int i = 0; i < balls.size(); i++)
+        {
+            balls[i].render();
+        } 
+        for(int i = 0; i < powerups.size(); i++)
+        {
+            tempPU = powerups[i];
+            if(tempPU.power != 3){
+                tempRect = &powerupClips[tempPU.power];
+                powerupTexture.render(tempPU.mCollider.x, tempPU.mCollider.y, tempRect);
+            }
+            
+        }
+        player1Paddle.render();
+        player2Paddle.render();
+        
+        //Render current frame
+        textTexture.render( (SCREEN_WIDTH - textTexture.getWidth())/2, 0);
+        
+        player1ScoreClipDec = &spriteClips[ player1Score%10 ];
+        player1ScoreClipTen = &spriteClips[ player1Score/10 ];
+        player2ScoreClipDec = &spriteClips[ player2Score%10 ];
+        player2ScoreClipTen = &spriteClips[ player2Score/10 ];
+        playerScoreTexture.render( 0, 0, player1ScoreClipTen );
+        playerScoreTexture.render( player1ScoreClipDec->w, 0, player1ScoreClipDec );
+        playerScoreTexture.render(SCREEN_WIDTH - 2*player2ScoreClipTen->w, 0, player2ScoreClipTen);
+        playerScoreTexture.render(SCREEN_WIDTH - player2ScoreClipDec->w, 0, player2ScoreClipDec);
+        
+
+        //SDL_BlitSurface( image_surface, NULL, screen_surface, NULL );
+        //Update the surface and screen
+        SDL_RenderPresent( renderer );
+        //SDL_UpdateWindowSurface( window );
+        
+        lastCollision = collision;
+    }
+}
+
 
 int main( int argc, char* args[] )
 {
@@ -274,7 +562,7 @@ int main( int argc, char* args[] )
     else
     {
         //Load media
-        if( !loadMedia(&image_surface) || !loadTextMedia("MegaPong") || !loadNumbers() || !loadPowerups())        
+        if( !loadMedia(&image_surface) || !loadTextMedia(&textTexture, "MegaPong") || !loadNumbers() || !loadPowerups())        
         {
             printf( "Failed to load media!\n" );
         }
@@ -282,182 +570,9 @@ int main( int argc, char* args[] )
         {   
             //Apply the image
             //SDL_BlitSurface( image_surface, NULL, screen_surface, NULL );
+            TwoPlayerMode(screen_surface, image_surface);
 
-
-            //Main loop flag
-			bool quit = false;
-
-			//Event handler
-			SDL_Event e;
-
-            //balls
-            Paddle player1Paddle(true);
-            Paddle player2Paddle(false);
-            SDL_Rect* tempRect = NULL;
-            SDL_Rect* player1ScoreClipDec = NULL;
-            SDL_Rect* player1ScoreClipTen = NULL;
-            SDL_Rect* player2ScoreClipDec = NULL;
-            SDL_Rect* player2ScoreClipTen = NULL;
-
-            int player1Score = 0;
-            int player2Score = 0;
-            int index;
-            int ballNum;
-            bool spawnBall = false;
-            Ball tempBall = Ball(0,0,0);
-            std::vector<int> staleBalls;
-            Powerup tempPU = Powerup(0,0,0);
-            std::vector<int> stalePU;
-            std::vector<Ball> balls;
-            std::vector<Powerup> powerups;
             
-            int collision = NO_COLLISION;
-            int lastCollision = NO_COLLISION;
-
-			//While application is running
-			while( !quit )
-			{
-
-				//Handle events on queue
-				while( SDL_PollEvent( &e ) != 0 )
-				{
-					//User requests quit
-					if( e.type == SDL_QUIT )
-					{
-						quit = true;
-                        printf("Quitting...\n");
-					}
-                    else if (e.type == SDL_KEYDOWN && e.key.repeat == 0 && e.key.keysym.sym == SDLK_q)
-                    {
-                        quit = true;
-                        printf("Quitting...\n");
-                    }
-
-                    
-                player1Paddle.handleEvent ( e );
-                player2Paddle.handleEvent ( e );
-                }
-                if (balls.empty())
-                {
-                    balls.push_back(initBall(SCREEN_WIDTH/2, SCREEN_HEIGHT/2, lastCollision == RIGHT_GOAL_COLLISION));
-                    powerups.push_back(initPowerup(25 + SCREEN_WIDTH/2,25 + SCREEN_HEIGHT/2, 1));
-                }
-
-                ballNum = balls.size();
-                for(int i = 0; i < ballNum; i++)
-                {
-                    collision = balls[i].move(player1Paddle, player2Paddle, lastCollision);
-                    if (collision == RIGHT_GOAL_COLLISION)
-                    {
-                        player1Score++;
-                        staleBalls.push_back(i);
-
-                    } else if (collision == LEFT_GOAL_COLLISION)
-                    {
-                        player2Score++;
-                        staleBalls.push_back(i);
-                    } else if (collision == POWERUP_COLLISION){
-
-                    }
-
-                    for(int j = 0; j < powerups.size(); j++){
-                        if(powerups.at(j).checkCollision(balls.at(i).mCollider)){
-                            
-                            collision = POWERUP_COLLISION;
-                            stalePU.push_back(j);
-                            switch(powerups.at(j).power){
-                                case 1:
-                                    
-                                    balls.push_back(initBall(powerups.at(j).mPosX, powerups.at(j).mPosY, balls.at(i).blue));
-                                    
-                            }
-                            
-                            powerups.at(j).power = 0;   
-                            
-                        }
-                    }
-                }
-                for(int i = 0; i < staleBalls.size(); i++)
-                {
-                    index = staleBalls.at(i);
-                    tempBall = balls.at(balls.size() - 1);
-                    balls.at(balls.size() - 1) = balls.at(index);
-                    balls.at(index) = tempBall;
-                    balls.pop_back();
-                }
-                staleBalls.clear();
-                
-                sort(stalePU.begin(), stalePU.end());
-
-                // Move all duplicates to last of vector
-                auto it = unique(stalePU.begin(), stalePU.end());
-
-                // Remove all duplicates
-                stalePU.erase(it, stalePU.end());
-                for(int i = 0; i < stalePU.size(); i++)
-                {
-                    index = stalePU.at(i);
-                    tempPU = powerups.at(powerups.size() - 1);
-                    powerups.at(powerups.size() - 1) = powerups.at(index);
-                    powerups.at(index) = tempPU;
-                    powerups.pop_back();
-                    
-                }
-                stalePU.clear();
-
-                if(collision != PLAYER1_COLLISION)
-                {
-                    player1Paddle.move();
-                    
-                }
-                if(collision != PLAYER2_COLLISION)
-                {
-                    player2Paddle.move();
-                    
-                }
-                
-				//Clear screen
-                SDL_SetRenderDrawColor( renderer, 0xFF, 0xFF, 0xFF, 0xFF );
-                SDL_RenderClear( renderer );
-                //SDL_RenderFillRect( renderer, &field_rect );
-
-                drawField(renderer, &field_rect);
-                for(int i = 0; i < balls.size(); i++)
-                {
-                    balls[i].render();
-                } 
-                for(int i = 0; i < powerups.size(); i++)
-                {
-                    tempPU = powerups[i];
-                    if(tempPU.power != 3){
-                        tempRect = &powerupClips[tempPU.power];
-                        powerupTexture.render(tempPU.mCollider.x, tempPU.mCollider.y, tempRect);
-                    }
-                    
-                }
-                player1Paddle.render();
-                player2Paddle.render();
-                
-                //Render current frame
-                textTexture.render( (SCREEN_WIDTH - textTexture.getWidth())/2, 0);
-                
-                player1ScoreClipDec = &spriteClips[ player1Score%10 ];
-                player1ScoreClipTen = &spriteClips[ player1Score/10 ];
-                player2ScoreClipDec = &spriteClips[ player2Score%10 ];
-                player2ScoreClipTen = &spriteClips[ player2Score/10 ];
-                playerScoreTexture.render( 0, 0, player1ScoreClipTen );
-                playerScoreTexture.render( player1ScoreClipDec->w, 0, player1ScoreClipDec );
-                playerScoreTexture.render(SCREEN_WIDTH - 2*player2ScoreClipTen->w, 0, player2ScoreClipTen);
-                playerScoreTexture.render(SCREEN_WIDTH - player2ScoreClipDec->w, 0, player2ScoreClipDec);
-                
-
-                //SDL_BlitSurface( image_surface, NULL, screen_surface, NULL );
-				//Update the surface and screen
-                SDL_RenderPresent( renderer );
-				//SDL_UpdateWindowSurface( window );
-                
-                lastCollision = collision;
-			}
             
         }
     }
@@ -467,3 +582,4 @@ int main( int argc, char* args[] )
 
     return 0;
 }
+
