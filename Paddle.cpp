@@ -4,7 +4,7 @@
 Paddle::Paddle(bool player)
 {
     
-
+    mHeight = PADDLE_HEIGHT;
     //Initialize the offsets
     if(player){
         mPosX = field_rect.x + 2*BAR_WIDTH;
@@ -14,13 +14,14 @@ Paddle::Paddle(bool player)
         mPosX = field_rect.x + field_rect.w - 3*BAR_WIDTH;
     }
     
-    mPosY = SCREEN_HEIGHT/2 - PADDLE_HEIGHT/2;
+    mPosY = SCREEN_HEIGHT/2 - mHeight/2;
 
     //Initialize the velocity
     mVelX = 0;
     mVelY = 0;
 
-    collisionRect.h = PADDLE_HEIGHT;
+
+    collisionRect.h = mHeight;
     collisionRect.w = BAR_WIDTH;
     collisionRect.x = mPosX;
     collisionRect.y = mPosY;
@@ -28,7 +29,8 @@ Paddle::Paddle(bool player)
     blue = player;
     player1 = player; 
 
-    move_powerup = false;
+    powerups[0] = false;
+    powerups[1] = false;
 }
 
 void Paddle::handleEvent( SDL_Event& e )
@@ -43,7 +45,7 @@ void Paddle::handleEvent( SDL_Event& e )
             {
                 case SDLK_UP: mVelY -= PADDLE_VEL; break;
                 case SDLK_DOWN: mVelY += PADDLE_VEL; break;
-                if(move_powerup){
+                if(powerups[0]){
                     case SDLK_LEFT: mVelX -= PADDLE_VEL; break;
                     case SDLK_RIGHT: mVelX += PADDLE_VEL; break;
                 }
@@ -57,7 +59,7 @@ void Paddle::handleEvent( SDL_Event& e )
             {
                 case SDLK_UP: mVelY += PADDLE_VEL; break;
                 case SDLK_DOWN: mVelY -= PADDLE_VEL; break;
-                if(move_powerup){
+                if(powerups[0]){
                     case SDLK_LEFT: mVelX += PADDLE_VEL; break;
                     case SDLK_RIGHT: mVelX -= PADDLE_VEL; break;
                 }
@@ -74,7 +76,7 @@ void Paddle::handleEvent( SDL_Event& e )
             {
                 case SDLK_w: mVelY -= PADDLE_VEL; break;
                 case SDLK_s: mVelY += PADDLE_VEL; break;
-                if(move_powerup){
+                if(powerups[0]){
                     case SDLK_a: mVelX -= PADDLE_VEL; break;
                     case SDLK_d: mVelX += PADDLE_VEL; break;
                 }
@@ -88,7 +90,7 @@ void Paddle::handleEvent( SDL_Event& e )
             {
                 case SDLK_w: mVelY += PADDLE_VEL; break;
                 case SDLK_s: mVelY -= PADDLE_VEL; break;
-                if(move_powerup){
+                if(powerups[0]){
                     case SDLK_a: mVelX += PADDLE_VEL; break;
                     case SDLK_d: mVelX -= PADDLE_VEL; break;
                 }
@@ -101,7 +103,7 @@ void Paddle::handleEvent( SDL_Event& e )
 void Paddle::move()
 {
     //Move the dot left or right
-    if(move_powerup){
+    if(powerups[0]){
         mPosX += mVelX;
         collisionRect.x = mPosX;
 
@@ -132,7 +134,7 @@ void Paddle::move()
     collisionRect.y = mPosY;
 
     //If the dot went too far up or down
-    if( ( mPosY < field_rect.y + BAR_WIDTH + 1) || ( mPosY + PADDLE_HEIGHT > field_rect.y + FIELD_HEIGHT - BAR_WIDTH - 1) )
+    if( ( mPosY < field_rect.y + BAR_WIDTH + 1) || ( mPosY + mHeight > field_rect.y + FIELD_HEIGHT - BAR_WIDTH - 1) )
     {
         //Move back
         mPosY -= mVelY;
@@ -144,7 +146,7 @@ void Paddle::render()
 {
     // Set color of ball
     blue ? SDL_SetRenderDrawColor( renderer, 0x00, 0x00, 0xFF, 0xFF) : SDL_SetRenderDrawColor( renderer, 0xFF, 0x00, 0x00, 0xFF);   
-    SDL_Rect paddle_rect = {mPosX, mPosY, BAR_WIDTH, PADDLE_HEIGHT};
+    SDL_Rect paddle_rect = {mPosX, mPosY, BAR_WIDTH, mHeight};
     SDL_RenderFillRect( renderer, &paddle_rect );
     
 }

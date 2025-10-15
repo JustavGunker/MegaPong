@@ -18,6 +18,8 @@ class Paddle
         int mPosX;
         int mPosY;
 
+        int mHeight;
+
         //The velocity of the paddle
         int mVelX, mVelY;
 
@@ -25,7 +27,7 @@ class Paddle
         bool blue;
 
         // Powerups for paddle as boolean
-        bool move_powerup;
+        bool powerups[2];
 
         //Initializes the variables
         Paddle(bool player1);

@@ -15,10 +15,14 @@ SDL_Window* window = NULL;
 TTF_Font* font = NULL;
 LTexture textTexture;
 LTexture gTimeTextTexture;
+LTexture menuTextTexture[9];
+SDL_Rect menuRects[9];
 SDL_Rect spriteClips[ 10 ];
 SDL_Rect powerupClips[ 3 ];
+SDL_Rect powerupDecayClips[ 10 ];
 LTexture playerScoreTexture;
 LTexture powerupTexture;
+LTexture powerupDecayTexture;
 SDL_Rect field_rect = {(SCREEN_WIDTH - FIELD_WIDTH)/2, (SCREEN_HEIGHT - FIELD_HEIGHT)/2, FIELD_WIDTH, FIELD_HEIGHT};
 
 
@@ -159,6 +163,44 @@ bool loadPowerups()
     return success;
 }
 
+bool loadPowerupDecay()
+{
+    //Loading success flag
+    bool success = true;
+
+    //Load sprite sheet texture
+    if( !powerupDecayTexture.loadFromFile( "powerupdecay.png" ))
+    {
+        printf( "Failed to load powerup texture!\n" );
+        success = false;
+    }
+    else
+    {   
+        for(int i = 0; i < 5; i++) 
+        {
+            
+            //Set sprite clips
+            powerupDecayClips[ i ].x = 0;
+            powerupDecayClips[ i ].y = i*22;
+            powerupDecayClips[ i ].w = 23;
+            powerupDecayClips[ i ].h = 22;
+            
+        }
+        for(int i = 0; i < 5; i++) 
+        {
+            
+            //Set sprite clips
+            powerupDecayClips[ i+5 ].x = 23;
+            powerupDecayClips[ i+5 ].y = i*22;
+            powerupDecayClips[ i+5 ].w = 23;
+            powerupDecayClips[ i+5 ].h = 22;
+            
+        }
+    }
+    
+    return success;
+}
+
 
 bool loadTextMedia(LTexture* texture, std::string string)
 {
@@ -239,6 +281,7 @@ void closeWindow(SDL_Surface** p_media_surface)
     textTexture.free();
     playerScoreTexture.free();
     powerupTexture.free();
+    powerupDecayTexture.free();
 
     //Free global font
     TTF_CloseFont( font );
@@ -296,6 +339,171 @@ int* getRandomPosition()
     return pos;
 }
 
+void ExtendPaddle(int addHeight, Paddle * playerPaddle)
+{
+    int newPaddleHeight = PADDLE_HEIGHT + addHeight;
+    playerPaddle->mHeight = newPaddleHeight;
+    playerPaddle->collisionRect.h = newPaddleHeight;
+
+    if(playerPaddle->mPosY > field_rect.y + FIELD_HEIGHT/2){
+        playerPaddle->mPosY -= addHeight;
+    } 
+}
+
+void RetractPaddle(Paddle * playerPaddle)
+{
+    int newPaddleHeight = PADDLE_HEIGHT;
+    playerPaddle->mHeight = newPaddleHeight;
+    playerPaddle->collisionRect.h = newPaddleHeight;
+}
+
+int GetDecayIndex(Uint32 startTime, Uint32 totalDuration) {
+    Uint32 elapsedTime = SDL_GetTicks() - startTime;
+
+    // Clamp to avoid going beyond totalDuration
+    if (elapsedTime > totalDuration)
+        elapsedTime = totalDuration;
+
+    // Compute which fourth we’re in
+    int index = (elapsedTime * 4) / totalDuration;
+
+    // Clamp again in case of rounding (e.g., exactly totalDuration)
+    if (index > 3)
+        index = 3;
+
+    return index;
+}
+
+void loadMenuText(LTexture* textTexture,int x, int y, std::string string){
+//Set text to be rendered
+    std::stringstream stream;
+    stream.str( "" );
+    stream << string;
+
+    SDL_Color textColor = { 0, 0, 0, 255 };
+
+    //Render text
+    if( !textTexture->loadFromRenderedText( stream.str().c_str(), textColor ) )
+    {
+        printf( "Unable to render menu texture!\n" );
+    }
+
+}
+
+bool checkMouseCollision( SDL_Rect* a, int mouseX, int mouseY)
+{
+    SDL_Rect b = {mouseX, mouseY, 1, 1};
+    //The sides of the rectangles
+    int leftA, leftB;
+    int rightA, rightB;
+    int topA, topB;
+    int bottomA, bottomB;
+
+    
+
+    //Calculate the sides of rect A
+    leftA = a->x;
+    rightA = a->x + a->w;
+    topA = a->y;
+    bottomA = a->y + a->h;
+
+    //Calculate the sides of rect B
+    leftB = b.x;
+    rightB = b.x + b.w;
+    topB = b.y;
+    bottomB = b.y + b.h;
+
+    //If any of the sides from A are outside of B
+    if( bottomA <= topB )
+    {
+        return false;
+    }
+
+    if( topA >= bottomB )
+    {
+        return false;
+    }
+
+    if( rightA <= leftB )
+    {
+        return false;
+    }
+
+    if( leftA >= rightB )
+    {
+        return false;
+    }
+
+    //If none of the sides from A are outside B
+    return true;
+}
+
+
+void spawnPowerupRandomly(std::vector<Powerup>* powerups){
+    int* randPos = getRandomPosition();
+    int randType = rand() % 3; // Assuming 3 types of powerups
+    powerups->push_back(initPowerup(randPos[0], randPos[1], randType));
+}
+
+bool pauseScreen(){
+
+    bool quit = false;
+
+    //Load menu buttons
+    loadMenuText(&menuTextTexture[6] , SCREEN_WIDTH/2, SCREEN_HEIGHT/3, "PAUSED");
+    menuRects[6] = {SCREEN_WIDTH/2 - menuTextTexture[6].getWidth()/2, SCREEN_HEIGHT/3 - menuTextTexture[6].getHeight()/2, menuTextTexture[6].getWidth(), menuTextTexture[6].getHeight()};
+    loadMenuText(&menuTextTexture[7] , SCREEN_WIDTH/3, 2*SCREEN_HEIGHT/3, "Exit");
+    menuRects[7] = {SCREEN_WIDTH/3 - menuTextTexture[7].getWidth()/2, 2*SCREEN_HEIGHT/3 - menuTextTexture[7].getHeight()/2, menuTextTexture[7].getWidth(), menuTextTexture[7].getHeight()};
+    loadMenuText(&menuTextTexture[8] , 2*SCREEN_WIDTH/3, 2*SCREEN_HEIGHT/3, "Continue");
+    menuRects[8] = {2*SCREEN_WIDTH/3 - menuTextTexture[8].getWidth()/2, 2*SCREEN_HEIGHT/3 - menuTextTexture[8].getHeight()/2, menuTextTexture[8].getWidth(), menuTextTexture[8].getHeight()};
+
+
+    //Event handler
+    SDL_Event e;
+    while( !quit )
+            {
+
+            //Handle events on queue
+            while( SDL_PollEvent( &e ) != 0 )
+            {
+                //User requests quit
+                if( e.type == SDL_QUIT )
+                {
+                    quit = true;
+                    printf("Quitting...\n");
+                }
+                else if (e.type == SDL_KEYDOWN && e.key.repeat == 0 && e.key.keysym.sym == SDLK_q)
+                {
+                    quit = true;
+                    printf("Quitting...\n");
+                }
+                else if (e.type == SDL_MOUSEBUTTONUP){
+                    
+                    // Get mouse position
+                    int x, y;
+                    SDL_GetMouseState(&x, &y);
+
+                    if(checkMouseCollision(&menuRects[7], x, y)){
+                        return true;
+                    } else if(checkMouseCollision(&menuRects[8], x, y)){
+                        return false;
+                    }
+
+                }
+            }
+            // Clear and render buttons
+            SDL_SetRenderDrawColor( renderer, 0xFF, 0xFF, 0xFF, 0xFF );
+            SDL_RenderClear( renderer );
+
+            menuTextTexture[6].render( menuRects[6].x, menuRects[6].y );
+            menuTextTexture[7].render( menuRects[7].x, menuRects[7].y );
+            menuTextTexture[8].render( menuRects[8].x, menuRects[8].y );
+
+            
+            SDL_RenderPresent( renderer );
+        }
+    return false;
+}
 
 void TwoPlayerMode(SDL_Surface* screen_surface, SDL_Surface* image_surface)
 {
@@ -310,16 +518,19 @@ void TwoPlayerMode(SDL_Surface* screen_surface, SDL_Surface* image_surface)
     SDL_Color textColor = { 0, 0, 0, 255 };
 
     //Timers
-    Uint32 startTime = 0;
+    Uint32 startTime = SDL_GetTicks();
     Uint32 player1Timers[2] = {0,0};
     Uint32 player2Timers[2] = {0,0};
     Uint32 powerup1Duration = 10000; // 10 seconds
     Uint32 powerup2Duration = 15000; // 15 seconds
+    Uint32 powerupTimer = 0; // Random time between 2 and 5 seconds
+    Uint32 gameDelay = 3000;
 
     //In memory text stream
     std::stringstream timeText;
 
-    //balls
+
+    
     Paddle player1Paddle(true);
     Paddle player2Paddle(false);
     SDL_Rect* tempRect = NULL;
@@ -345,7 +556,32 @@ void TwoPlayerMode(SDL_Surface* screen_surface, SDL_Surface* image_surface)
     int* randPos;
     int direction = 1;
 
-    powerups.push_back(initPowerup(25 + SCREEN_WIDTH/2,25 + SCREEN_HEIGHT/2, 0));
+    // Short delay for players to get ready
+    while( SDL_GetTicks() - startTime < gameDelay ){
+        SDL_SetRenderDrawColor( renderer, 0xFF, 0xFF, 0xFF, 0xFF );
+        SDL_RenderClear( renderer );
+        drawField(renderer, &field_rect);
+        
+        //Set text to be rendered
+        timeText.str( "" );
+        timeText <<  (gameDelay - (SDL_GetTicks() - startTime))/1000 + 1;
+
+        //Render text
+        if( !gTimeTextTexture.loadFromRenderedText( timeText.str().c_str(), textColor ) )
+        {
+            printf( "Unable to render time texture!\n" );
+        }
+
+        
+        //Render textures
+        gTimeTextTexture.render( ( SCREEN_WIDTH - gTimeTextTexture.getWidth() ) / 2, textTexture.getHeight() );
+
+
+        SDL_RenderPresent( renderer );
+    }
+
+    startTime = SDL_GetTicks(); // Reset start time for actual game
+    powerupTimer = SDL_GetTicks() - startTime + rand() % 5000 + 10000;
 
     //While application is running
     while( !quit )
@@ -380,24 +616,54 @@ void TwoPlayerMode(SDL_Surface* screen_surface, SDL_Surface* image_surface)
                 randPos = getRandomPosition();
                 powerups.push_back(initPowerup(randPos[0], randPos[1], 2));
             }
+            else if( e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE )
+            {
+                Uint32 pauseTime = SDL_GetTicks();
+                quit = pauseScreen();
+                startTime += SDL_GetTicks() - pauseTime; // Adjust start time to account for pause duration
+                powerupTimer = SDL_GetTicks() - startTime + rand() % 5000 + 10000; // Reset powerup timer
+            }
+            else if( e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_0 ) // Spawn random powerup for testing
+            {
+                randPos = getRandomPosition();
+                powerups.push_back(initPowerup(randPos[0], randPos[1], 2));
+            }
 
         player1Paddle.handleEvent ( e );
         player2Paddle.handleEvent ( e );
         }
 
         // Handle powerup durations
-        if(player1Paddle.move_powerup && (SDL_GetTicks() - player1Timers[0] >= powerup1Duration))
+        if(player1Paddle.powerups[0] && (SDL_GetTicks() - player1Timers[0] >= powerup1Duration))
         {
-            player1Paddle.move_powerup = false;
+            player1Paddle.powerups[0] = false;
             player1Paddle.mPosX = field_rect.x + 2*BAR_WIDTH;
             player1Paddle.collisionRect.x = player1Paddle.mPosX;
         }
-        if(player2Paddle.move_powerup && (SDL_GetTicks() - player2Timers[0] >= powerup1Duration))
+        if(player2Paddle.powerups[0] && (SDL_GetTicks() - player2Timers[0] >= powerup1Duration))
         {
-            player2Paddle.move_powerup = false;
+            player2Paddle.powerups[0] = false;
             player2Paddle.mPosX = field_rect.x + field_rect.w - 3*BAR_WIDTH;
             player2Paddle.collisionRect.x = player2Paddle.mPosX;
         }
+
+        if(player1Paddle.powerups[1] &&(SDL_GetTicks() - player1Timers[1] >= powerup2Duration))
+        {
+            player1Paddle.powerups[1] = false;
+            RetractPaddle(&player1Paddle);
+        }
+        if(player2Paddle.powerups[1] &&(SDL_GetTicks() - player2Timers[1] >= powerup2Duration))
+        {
+            player2Paddle.powerups[1] = false;
+            RetractPaddle(&player2Paddle);
+        }
+        // Handle spawning powerups
+        if(SDL_GetTicks() - startTime >= powerupTimer){
+            spawnPowerupRandomly(&powerups);
+            powerupTimer = SDL_GetTicks() - startTime + rand() % 5000 + 10000; // Reset timer
+        }
+
+
 
 
         if (balls.empty())
@@ -429,11 +695,11 @@ void TwoPlayerMode(SDL_Surface* screen_surface, SDL_Surface* image_surface)
                     switch(powerups.at(j).power){
                         case 0:
                             if(balls.at(i).blue){
-                                player1Paddle.move_powerup = true;
+                                player1Paddle.powerups[0] = true;
                                 player1Timers[0] = SDL_GetTicks();
                             }
                             else{
-                                player2Paddle.move_powerup = true;
+                                player2Paddle.powerups[0] = true;
                                 player2Timers[0] = SDL_GetTicks();
                             }
                             break;
@@ -447,13 +713,13 @@ void TwoPlayerMode(SDL_Surface* screen_surface, SDL_Surface* image_surface)
                             break;
                         case 2:      
                             if(balls.at(i).blue){
-                                PADDLE_HEIGHT = 100;
-                                player1Paddle.collisionRect.h = PADDLE_HEIGHT;
+                                ExtendPaddle(40, &player1Paddle);
+                                player1Paddle.powerups[1] = true;
                                 player1Timers[1] = SDL_GetTicks();
                             }
                             else{
-                                PADDLE_HEIGHT = 100;
-                                player2Paddle.collisionRect.h = PADDLE_HEIGHT;
+                                ExtendPaddle(40, &player2Paddle);
+                                player2Paddle.powerups[1] = true;
                                 player2Timers[1] = SDL_GetTicks();
                             }
                             break;                               
@@ -520,6 +786,7 @@ void TwoPlayerMode(SDL_Surface* screen_surface, SDL_Surface* image_surface)
             }
             
         }
+
         player1Paddle.render();
         player2Paddle.render();
         
@@ -535,14 +802,33 @@ void TwoPlayerMode(SDL_Surface* screen_surface, SDL_Surface* image_surface)
         playerScoreTexture.render(SCREEN_WIDTH - 2*player2ScoreClipTen->w, 0, player2ScoreClipTen);
         playerScoreTexture.render(SCREEN_WIDTH - player2ScoreClipDec->w, 0, player2ScoreClipDec);
         
+        if(player1Paddle.powerups[0]){
+            tempRect = &powerupDecayClips[GetDecayIndex(player1Timers[0],powerup1Duration)];
+            powerupDecayTexture.render(tempRect->w, player1ScoreClipDec->h, tempRect);
+        }
+        if(player1Paddle.powerups[1]){
+            tempRect = &powerupDecayClips[5 + GetDecayIndex(player1Timers[1],powerup2Duration)];
+            powerupDecayTexture.render(2*tempRect->w, player1ScoreClipDec->h, tempRect);
+        }
+        if(player2Paddle.powerups[0]){
+            tempRect = &powerupDecayClips[GetDecayIndex(player2Timers[0],powerup1Duration)];
+            powerupDecayTexture.render(SCREEN_WIDTH - 3*tempRect->w, player2ScoreClipDec->h, tempRect);
+        }
+        if(player2Paddle.powerups[1]){
+            tempRect = &powerupDecayClips[5 + GetDecayIndex(player2Timers[1],powerup2Duration)];
+            powerupDecayTexture.render(SCREEN_WIDTH - 2*tempRect->w, player2ScoreClipDec->h, tempRect);
+        }
 
         //SDL_BlitSurface( image_surface, NULL, screen_surface, NULL );
         //Update the surface and screen
+
+        
         SDL_RenderPresent( renderer );
         //SDL_UpdateWindowSurface( window );
         
         lastCollision = collision;
     }
+
 }
 
 
@@ -550,6 +836,17 @@ int main( int argc, char* args[] )
 {
     SDL_Surface* screen_surface = NULL;
     SDL_Surface* image_surface = NULL;
+
+    //Main loop flag
+    bool quit = false;
+    bool singlePlayerMode = false;
+    SDL_Rect* mouseRect;
+
+  
+
+    //Event handler
+    SDL_Event e;
+
 
     
 
@@ -562,20 +859,102 @@ int main( int argc, char* args[] )
     else
     {
         //Load media
-        if( !loadMedia(&image_surface) || !loadTextMedia(&textTexture, "MegaPong") || !loadNumbers() || !loadPowerups())        
+        if( !loadMedia(&image_surface) || !loadTextMedia(&textTexture, "MegaPong") || !loadNumbers() || !loadPowerups() || !loadPowerupDecay())        
         {
             printf( "Failed to load media!\n" );
         }
         else
         {   
-            //Apply the image
-            //SDL_BlitSurface( image_surface, NULL, screen_surface, NULL );
-            TwoPlayerMode(screen_surface, image_surface);
+            //Load menu buttons
+            loadMenuText(&menuTextTexture[0] , SCREEN_WIDTH/2, SCREEN_HEIGHT/3, "1 Player");
+            menuRects[0] = {SCREEN_WIDTH/2 - menuTextTexture[0].getWidth()/2, SCREEN_HEIGHT/3 - menuTextTexture[0].getHeight()/2, menuTextTexture[0].getWidth(), menuTextTexture[0].getHeight()};
+            loadMenuText(&menuTextTexture[1] , SCREEN_WIDTH/2, 2*SCREEN_HEIGHT/3, "2 Players");
+            menuRects[1] = {SCREEN_WIDTH/2 - menuTextTexture[1].getWidth()/2, 2*SCREEN_HEIGHT/3 - menuTextTexture[1].getHeight()/2, menuTextTexture[1].getWidth(), menuTextTexture[1].getHeight()};
+            loadMenuText(&menuTextTexture[2] , SCREEN_WIDTH/2, SCREEN_HEIGHT/4, "Easy");
+            menuRects[2] = {SCREEN_WIDTH/2 - menuTextTexture[2].getWidth()/2, SCREEN_HEIGHT/4 - menuTextTexture[2].getHeight()/2, menuTextTexture[2].getWidth(), menuTextTexture[2].getHeight()};
+            loadMenuText(&menuTextTexture[3] , SCREEN_WIDTH/2, 2*SCREEN_HEIGHT/4, "Medium");
+            menuRects[3] = {SCREEN_WIDTH/2 - menuTextTexture[3].getWidth()/2, 2*SCREEN_HEIGHT/4 - menuTextTexture[3].getHeight()/2, menuTextTexture[3].getWidth(), menuTextTexture[3].getHeight()};
+            loadMenuText(&menuTextTexture[4] , SCREEN_WIDTH/2, 3*SCREEN_HEIGHT/4, "Hard");
+            menuRects[4] = {SCREEN_WIDTH/2 - menuTextTexture[4].getWidth()/2, 3*SCREEN_HEIGHT/4 - menuTextTexture[4].getHeight()/2, menuTextTexture[4].getWidth(), menuTextTexture[4].getHeight()};
+            loadMenuText(&menuTextTexture[5] , 0, SCREEN_HEIGHT - menuTextTexture[5].getHeight(), "Back");
+            menuRects[5] = {0, SCREEN_HEIGHT - menuTextTexture[5].getHeight(), menuTextTexture[5].getWidth(), menuTextTexture[5].getHeight()};
 
             
             
+            while( !quit )
+            {
+
+                //Handle events on queue
+                while( SDL_PollEvent( &e ) != 0 )
+                {
+                    //User requests quit
+                    if( e.type == SDL_QUIT )
+                    {
+                        quit = true;
+                        printf("Quitting...\n");
+                    }
+                    else if (e.type == SDL_KEYDOWN && e.key.repeat == 0 && e.key.keysym.sym == SDLK_q)
+                    {
+                        quit = true;
+                        printf("Quitting...\n");
+                    }
+                    else if (e.type == SDL_MOUSEBUTTONUP){
+                        
+                        // Get mouse position
+                        int x, y;
+                        SDL_GetMouseState(&x, &y);
+
+                        if(singlePlayerMode){
+                            if(checkMouseCollision(&menuRects[2], x, y)){
+                                printf("Easy mode selected\n");
+                                //SinglePlayerMode(screen_surface, image_surface);
+                            }
+                            else if(checkMouseCollision(&menuRects[3], x, y)){
+                                printf("Medium mode selected\n");
+                                //SinglePlayerMode(screen_surface, image_surface);
+                            }
+                            else if(checkMouseCollision(&menuRects[4], x, y)){
+                                printf("Hard mode selected\n");
+                                //SinglePlayerMode(screen_surface, image_surface);
+                            }
+                            else if(checkMouseCollision(&menuRects[5], x, y)){
+                                singlePlayerMode = false;
+                            }
+                        } else {
+                            if(checkMouseCollision(&menuRects[0], x, y)){
+                                printf("1 Player mode selected\n");
+                                //SinglePlayerMode(screen_surface, image_surface);
+                                singlePlayerMode = true;
+                            }
+                            else if(checkMouseCollision(&menuRects[1], x, y)){
+                                printf("2 Player mode selected\n");
+                                TwoPlayerMode(screen_surface, image_surface);
+                            }
+                        }
+
+                    }
+                }
+                // Clear and render buttons
+                SDL_SetRenderDrawColor( renderer, 0xFF, 0xFF, 0xFF, 0xFF );
+                SDL_RenderClear( renderer );
+                if(singlePlayerMode){
+                    menuTextTexture[2].render( menuRects[2].x, menuRects[2].y );
+                    menuTextTexture[3].render( menuRects[3].x, menuRects[3].y );
+                    menuTextTexture[4].render( menuRects[4].x, menuRects[4].y );
+                    menuTextTexture[5].render( menuRects[5].x, menuRects[5].y );
+                } else {
+                    menuTextTexture[0].render( menuRects[0].x, menuRects[0].y );
+                    menuTextTexture[1].render( menuRects[1].x, menuRects[1].y );
+                }
+                
+                SDL_RenderPresent( renderer );
+            }
+            
         }
     }
+
+
+    
 
     //Free resources and close SDL
     closeWindow(&image_surface);
