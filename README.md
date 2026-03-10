@@ -1,4 +1,4 @@
-STATUS: in progress
+STATUS: Core gameplay for 2-player mode finished. AI in progress
 
 
 A small arcade game to explore the SDL packages for 2D games in C++. An extended version of the traditional game Pong, now with powerups!
