@@ -5,10 +5,10 @@ OBJS = pong.cpp Ball.cpp Paddle.cpp Texture.cpp Powerup.cpp
 CC = g++
 
 #INCLUDE_PATHS specifies the additional include paths we'll need
-INCLUDE_PATHS = -IC:\MinGW-dev-lib64\include\SDL2
+INCLUDE_PATHS = -I\MinGW-dev-lib64\include\SDL2
 
 #LIBRARY_PATHS specifies the additional library paths we'll need
-LIBRARY_PATHS = -LC:\MinGW-dev-lib64\lib
+LIBRARY_PATHS = -L\MinGW-dev-lib64\lib
 
 #COMPILER_FLAGS specifies the additional compilation options we're using
 # -w suppresses all warnings
